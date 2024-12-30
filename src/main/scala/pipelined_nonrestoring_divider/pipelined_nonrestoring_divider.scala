@@ -26,8 +26,8 @@
 * SOFTWARE.
 * ------------------------------------------------------------------------------------ 
 */
+package pipelined_nonrestoring_divider
 
-import circt.stage.ChiselStage
 import chisel3._
 import chisel3.util._
 
