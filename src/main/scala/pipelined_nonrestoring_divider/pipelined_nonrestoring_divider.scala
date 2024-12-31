@@ -64,15 +64,16 @@ class non_restoring_divider extends Module{
   val valid_reg     = RegInit(UInt(33.W), 0.U)  // No need to make this a vector
   val divisor_regs  = RegInit(VecInit(Seq.fill (33) (0.U(32.W))))
   val dividend_regs = Seq.tabulate(32)(i => RegInit(0.U((32 - i).W)))   // Reg 0 -> 32 bits. Reg 31 -> 1 Bit
-  val quotient_regs = Seq.tabulate(32)(i => RegInit(0.U((i+1).W)))      // Reg 0 -> 1 Bit.   Reg 31 -> 32 Bits
+  val quotient_regs = Seq.tabulate(33)(i => RegInit(0.U((i+1).W)))      // Reg 0 -> 1 Bit.   Reg 31 -> 32 Bits
   val partial_remainder_regs = RegInit(VecInit(Seq.fill (33) (0.U(32.W))))
+  val sign_reg      = RegInit(UInt(33.W), 0.U)
 
   // "genvar" wires
   val partial_remainder_outputs = Seq.fill(32)(Wire(UInt(32.W)))
 
   // Shift inputs
   valid_reg         := valid_reg<<1 | (io.dividend.valid && io.divisor.valid)  // Shift in valid
-  divisor_regs(0)   := io.divisor.bits
+  sign_reg          := sign_reg<<1 | io.divisor.bits(31) ^ io.dividend.bits(31)
 
 
   // Connect up non_restoring_computation modules
@@ -88,14 +89,14 @@ class non_restoring_divider extends Module{
 
   // Stage 0 logic
   partial_remainder_regs(0) := 0.U
-  dividend_regs(0)          := io.dividend.bits
-  divisor_regs(0)           := io.divisor.bits
+  dividend_regs(0)          := Mux(io.dividend.bits(31), ~io.dividend.bits + 1.U, io.dividend.bits)
+  divisor_regs(0)           := Mux(io.divisor.bits(31), ~io.divisor.bits + 1.U, io.divisor.bits)
   
   for(i <- 1 to 31){
     divisor_regs(i) := divisor_regs(i-1)
   }
 
-  dividend_regs(0) := io.dividend.bits
+
   for(i <- 1 until 32) { 
       dividend_regs(i) := dividend_regs(i-1)((31-i),0)
       dontTouch(dividend_regs(i))
@@ -113,10 +114,13 @@ class non_restoring_divider extends Module{
   }
   partial_remainder_regs(32) := partial_remainder_outputs(31)
   divisor_regs(32) := divisor_regs(31)
+  divisor_regs(32) := divisor_regs(31)
 
   // Assign Outputs
   io.quotient.valid   :=  valid_reg(valid_reg.getWidth-1)
   io.remainder.valid  :=  valid_reg(valid_reg.getWidth-1)
-  io.quotient.bits   :=  quotient_regs(31)
-  io.remainder.bits  :=  Mux(partial_remainder_regs(32)(31),partial_remainder_regs(32) + divisor_regs(32),partial_remainder_regs(32))
+  io.quotient.bits    :=  Mux(sign_reg(sign_reg.getWidth-1), ~quotient_regs(31) + 1.U, quotient_regs(31))
+  val final_remainder  =  Wire(UInt(32.W))
+  final_remainder     :=  Mux(partial_remainder_regs(32)(31),partial_remainder_regs(32) + divisor_regs(32),partial_remainder_regs(32))
+  io.remainder.bits   :=  Mux(sign_reg(sign_reg.getWidth-1), ~final_remainder + 1.U, final_remainder)
 }
