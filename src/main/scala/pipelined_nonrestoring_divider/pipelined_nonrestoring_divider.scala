@@ -53,7 +53,6 @@ class non_restoring_divider extends Module{
   })
 
   // FIXME: Add stall signal if cant output result (backpressure)
-  // FIXME: missing remainder update if negative...
   // FIXME: remainder entirely not output
   // FIXME: forgot to follow my own naming conventions
 
@@ -63,7 +62,7 @@ class non_restoring_divider extends Module{
 
   // Generate vec and divisor Regs (constant width)
   val valid_reg     = RegInit(UInt(33.W), 0.U)  // No need to make this a vector
-  val divisor_regs  = RegInit(VecInit(Seq.fill (32) (0.U(32.W))))
+  val divisor_regs  = RegInit(VecInit(Seq.fill (33) (0.U(32.W))))
   val dividend_regs = Seq.tabulate(32)(i => RegInit(0.U((32 - i).W)))   // Reg 0 -> 32 bits. Reg 31 -> 1 Bit
   val quotient_regs = Seq.tabulate(32)(i => RegInit(0.U((i+1).W)))      // Reg 0 -> 1 Bit.   Reg 31 -> 32 Bits
   val partial_remainder_regs = RegInit(VecInit(Seq.fill (33) (0.U(32.W))))
@@ -113,12 +112,11 @@ class non_restoring_divider extends Module{
     dontTouch(partial_remainder_regs(i))
   }
   partial_remainder_regs(32) := partial_remainder_outputs(31)
-
-  io.remainder.bits := partial_remainder_regs(32)
+  divisor_regs(32) := divisor_regs(31)
 
   // Assign Outputs
   io.quotient.valid   :=  valid_reg(valid_reg.getWidth-1)
   io.remainder.valid  :=  valid_reg(valid_reg.getWidth-1)
   io.quotient.bits   :=  quotient_regs(31)
-  io.remainder.bits  :=  partial_remainder_regs(32)
+  io.remainder.bits  :=  Mux(partial_remainder_regs(32)(31),partial_remainder_regs(32) + divisor_regs(32),partial_remainder_regs(32))
 }

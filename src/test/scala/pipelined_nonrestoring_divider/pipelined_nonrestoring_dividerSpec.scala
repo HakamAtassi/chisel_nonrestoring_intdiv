@@ -25,7 +25,7 @@ import scala.collection.mutable.Queue
 class pipelined_nonrestoring_dividerSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
 
   val width = 32;
-  val num_cases = 4;
+  val num_cases = 100;
 
 
   behavior of "pipelined nonrestoring divider"
@@ -33,8 +33,8 @@ class pipelined_nonrestoring_dividerSpec extends AnyFlatSpec with ChiselScalates
     test(new non_restoring_divider())
       .withAnnotations(Seq(WriteVcdAnnotation)) { dut =>
 
-      val dividends  = Seq.fill(num_cases)((BigInt(width - 1, Random) + BigInt("80000000", 16)).U(width.W))
-      val divisors   = Seq.fill(num_cases)(BigInt(width - 1, Random).mod(BigInt("80000000", 16)).U(width.W))
+      val dividends  = Seq.fill(num_cases)((BigInt(width - 1, Random) + BigInt("8000000", 16)).mod(BigInt("80000000", 16)).U(width.W))
+      val divisors   = Seq.fill(num_cases)(BigInt(width - 1, Random).mod(BigInt("8000000", 16)).U(width.W))
 
       dut.reset.poke(true.B)
       dut.clock.step(width)
@@ -64,7 +64,7 @@ class pipelined_nonrestoring_dividerSpec extends AnyFlatSpec with ChiselScalates
         if (received < num_cases) {
           dut.io.quotient.ready.poke(true.B)
           dut.io.remainder.ready.poke(true.B)
-          if (dut.io.dividend.valid.peek().litToBoolean && dut.io.divisor.valid.peek().litToBoolean) {
+          if (dut.io.quotient.valid.peek().litToBoolean && dut.io.remainder.valid.peek().litToBoolean) {
             val dividend = dividends_queue.dequeue()
             val divisor = divisors_queue.dequeue()
             val quotient = dut.io.quotient.bits.peek().litValue.toInt
@@ -76,6 +76,8 @@ class pipelined_nonrestoring_dividerSpec extends AnyFlatSpec with ChiselScalates
             received += 1
           }
         }
+
+        println(s"Sent $sent and Recieved $received")
 
         // Step the simulation forward.
         dut.clock.step()
