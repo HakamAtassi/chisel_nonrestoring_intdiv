@@ -59,12 +59,12 @@ class pipelined_nonrestoring_dividerSpec extends AnyFlatSpec with ChiselScalates
           val remainder = dut.io.remainder.bits.peek().litValue.toInt
           withClue(s"Dividend $dividend and Divisor $divisor: Quotient: ${quotient} Remainder: ${remainder}\n") {
               quotient shouldBe (dividend / divisor)
-              //remainder shouldBe (dividend% divisor)
+              remainder shouldBe (dividend% divisor)
           }
           received += 1
         }
       }
-      println(s"Sent $sent and Recieved $received")
+      //println(s"Sent $sent and Recieved $received")
 
       // Step the simulation forward.  
       dut.clock.step()
