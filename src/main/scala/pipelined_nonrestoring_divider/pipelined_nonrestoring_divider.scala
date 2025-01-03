@@ -50,6 +50,7 @@ class non_restoring_divider extends Module{
 
     val quotient    =     Decoupled(UInt(32.W))
     val remainder   =     Decoupled(UInt(32.W))
+    val stall       =     Input(Bool())
   })
 
   // FIXME: Add stall signal if cant output result (backpressure)
@@ -57,8 +58,13 @@ class non_restoring_divider extends Module{
   // FIXME: forgot to follow my own naming conventions
 
   // Assign inputs as always ready
-  io.dividend.ready :=  1.B
-  io.divisor.ready  :=  1.B  
+  when (!io.stall){
+    io.dividend.ready :=  1.B
+    io.divisor.ready  :=  1.B  
+  }.otherwise{
+    io.dividend.ready :=  0.B
+    io.divisor.ready  :=  0.B  
+  }
 
   // Generate vec and divisor Regs (constant width)
   val valid_reg     = RegInit(UInt(33.W), 0.U)  // No need to make this a vector
@@ -72,10 +78,7 @@ class non_restoring_divider extends Module{
   // "genvar" wires
   val partial_remainder_outputs = Seq.fill(32)(Wire(UInt(32.W)))
 
-  // Shift inputs
-  valid_reg               := valid_reg<<1 | (io.dividend.valid && io.divisor.valid)  // Shift in valid
-  divisor_sign_reg        := divisor_sign_reg<<1 | io.divisor.bits(31)
-  dividend_sign_reg       := dividend_sign_reg<<1 | io.dividend.bits(31)
+  
 
 
   // Connect up non_restoring_computation modules
@@ -85,38 +88,47 @@ class non_restoring_divider extends Module{
     non_restoring_computation.io.divisor               := divisor_regs(i)
     non_restoring_computation.io.sel                   := partial_remainder_regs(i)(31)
 
-   partial_remainder_outputs(i) := non_restoring_computation.io.partial_remainder_out
-   dontTouch(partial_remainder_outputs(i))
+  partial_remainder_outputs(i) := non_restoring_computation.io.partial_remainder_out
+  dontTouch(partial_remainder_outputs(i))
   }
-
-  // Stage 0 logic
-  partial_remainder_regs(0) := 0.U
-  dividend_regs(0)          := Mux(io.dividend.bits(31), ~io.dividend.bits + 1.U, io.dividend.bits)
-  divisor_regs(0)           := Mux(io.divisor.bits(31), ~io.divisor.bits + 1.U, io.divisor.bits)
   
-  for(i <- 1 to 31){
-    divisor_regs(i) := divisor_regs(i-1)
-  }
+  when(!io.stall){
+    // Stage 0 logic
+    partial_remainder_regs(0) := 0.U
+    dividend_regs(0)          := Mux(io.dividend.bits(31), ~io.dividend.bits + 1.U, io.dividend.bits)
+    divisor_regs(0)           := Mux(io.divisor.bits(31), ~io.divisor.bits + 1.U, io.divisor.bits)
+
+    //shift inputs
+    valid_reg               := valid_reg<<1 | (io.dividend.valid && io.divisor.valid)  // Shift in valid
+    divisor_sign_reg        := divisor_sign_reg<<1 | io.divisor.bits(31)
+    dividend_sign_reg       := dividend_sign_reg<<1 | io.dividend.bits(31)
 
 
-  for(i <- 1 until 32) { 
+    for(i <- 1 until 32) { 
+      divisor_regs(i) := divisor_regs(i-1)
       dividend_regs(i) := dividend_regs(i-1)((31-i),0)
-      dontTouch(dividend_regs(i))
+    }
+    for(i <- 1 to 31){
+      partial_remainder_regs(i) := partial_remainder_outputs(i-1)
+      quotient_regs(i) := quotient_regs(i-1) ## (~partial_remainder_outputs(i)(31))
+    }
+    quotient_regs(0) := (~partial_remainder_outputs(0)(31))
+
+    partial_remainder_regs(32) := partial_remainder_outputs(31)
+    divisor_regs(32) := divisor_regs(31)
+  }
+  
+  for(i <- 1 until 32) { 
+    dontTouch(dividend_regs(i))
+    dontTouch(divisor_regs(i))
   }
 
   dontTouch(quotient_regs(0))
   dontTouch(partial_remainder_regs(0))
-  quotient_regs(0) := (~partial_remainder_outputs(0)(31))
   for(i <- 1 to 31){
-    //partial_remainder_regs(i) := Cat(partial_remainder_outputs(i-1)(30,0), dividend_regs(i)(dividend_regs(i).getWidth-1))
-    partial_remainder_regs(i) := partial_remainder_outputs(i-1)
-    quotient_regs(i) := quotient_regs(i-1) ## (~partial_remainder_outputs(i)(31))
     dontTouch(quotient_regs(i))
     dontTouch(partial_remainder_regs(i))
   }
-  partial_remainder_regs(32) := partial_remainder_outputs(31)
-  divisor_regs(32) := divisor_regs(31)
-  divisor_regs(32) := divisor_regs(31)
 
   val final_remainder  =  Wire(UInt(32.W))
   val q_sign = Wire(Bool())

@@ -6,22 +6,6 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scala.util.Random
 import scala.collection.mutable.Queue
-
-/**
-  * This is a trivial example of how to run this Specification
-  * From within sbt use:
-  * {{{
-  * testOnly gcd.GCDSpec
-  * }}}
-  * From a terminal shell use:
-  * {{{
-  * sbt 'testOnly gcd.GCDSpec'
-  * }}}
-  * Testing from mill:
-  * {{{
-  * mill chisel_nonrestoring_intdiv.test.testOnly gcd.GCDSpec
-  * }}}
-  */
 class pipelined_nonrestoring_dividerSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
 
   def run_test_case(dut: non_restoring_divider, dividends: Seq[UInt], divisors: Seq[UInt]) = {
@@ -36,39 +20,55 @@ class pipelined_nonrestoring_dividerSpec extends AnyFlatSpec with ChiselScalates
       dut.io.quotient.ready.poke(false.B)
       dut.io.remainder.ready.poke(false.B)
 
-      if (sent < num_cases) {
-        dut.io.dividend.valid.poke(true.B)
-        dut.io.divisor.valid.poke(true.B)
-
-        dut.io.dividend.bits.poke(dividends(sent))
-        dut.io.divisor.bits.poke(divisors(sent))
-        if (dut.io.dividend.ready.peek().litToBoolean && dut.io.divisor.ready.peek().litToBoolean) {
-          dividends_queue.enqueue(dividends(sent).litValue.toInt)
-          divisors_queue.enqueue(divisors(sent).litValue.toInt)
-          sent += 1
+      
+      if (BigInt(1, Random) == 1){
+        //STALL
+        var stall_cycles = BigInt(3, Random)
+        for (i <- 0 until stall_cycles.toInt){
+          dut.io.stall.poke(true.B)
+          dut.clock.step()
+          cycles += 1
         }
-      }
+        dut.io.stall.poke(false.B)
+      } else {
+        //Dont stall
+        if (sent < num_cases) {
+          dut.io.dividend.valid.poke(true.B)
+          dut.io.divisor.valid.poke(true.B)
 
-      if (received < num_cases) {
-        dut.io.quotient.ready.poke(true.B)
-        dut.io.remainder.ready.poke(true.B)
-        if (dut.io.quotient.valid.peek().litToBoolean && dut.io.remainder.valid.peek().litToBoolean) {
-          val dividend = dividends_queue.dequeue()
-          val divisor = divisors_queue.dequeue()
-          val quotient = dut.io.quotient.bits.peek().litValue.toInt
-          val remainder = dut.io.remainder.bits.peek().litValue.toInt
-          withClue(s"Dividend $dividend and Divisor $divisor: Quotient: ${quotient} Remainder: ${remainder}\n") {
+          dut.io.dividend.bits.poke(dividends(sent))
+          dut.io.divisor.bits.poke(divisors(sent))
+          if (dut.io.dividend.ready.peek().litToBoolean && dut.io.divisor.ready.peek().litToBoolean) {
+            dividends_queue.enqueue(dividends(sent).litValue.toInt)
+            divisors_queue.enqueue(divisors(sent).litValue.toInt)
+            sent += 1
+          }
+        }
+
+        if (received < num_cases) {
+          dut.io.quotient.ready.poke(true.B)
+          dut.io.remainder.ready.poke(true.B)
+          if (dut.io.quotient.valid.peek().litToBoolean && dut.io.remainder.valid.peek().litToBoolean) {
+            val dividend = dividends_queue.dequeue()
+            val divisor = divisors_queue.dequeue()
+            val quotient = dut.io.quotient.bits.peek().litValue.toInt
+            val remainder = dut.io.remainder.bits.peek().litValue.toInt
+            println(s"Dividend $dividend and Divisor $divisor: Quotient: ${quotient} Remainder: ${remainder}")
+            withClue(s"Dividend $dividend and Divisor $divisor: Quotient: ${quotient} Remainder: ${remainder}\n") {
               quotient shouldBe (dividend / divisor)
               remainder shouldBe (dividend% divisor)
+            }
+            received += 1
           }
-          received += 1
         }
+        dut.clock.step()
+        cycles += 1
       }
-      //println(s"Sent $sent and Recieved $received")
+      println(s"Sent $sent and Recieved $received cycles $cycles")
 
       // Step the simulation forward.  
-      dut.clock.step()
-      cycles += 1
+      // dut.clock.step()
+      // cycles += 1
     }
   }
 
